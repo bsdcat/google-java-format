@@ -32,6 +32,7 @@ import com.google.common.collect.TreeRangeSet;
 import com.google.googlejavaformat.Newlines;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.ReferenceTree;
+import com.sun.source.tree.CaseTree;
 import com.sun.source.tree.IdentifierTree;
 import com.sun.source.tree.ImportTree;
 import com.sun.source.tree.Tree;
@@ -48,15 +49,16 @@ import com.sun.tools.javac.tree.DCTree.DCReference;
 import com.sun.tools.javac.tree.JCTree;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.tree.JCTree.JCFieldAccess;
-import com.sun.tools.javac.tree.JCTree.JCIdent;
 import com.sun.tools.javac.tree.JCTree.JCImport;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.Log;
 import com.sun.tools.javac.util.Options;
 import java.io.IOError;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.tools.Diagnostic;
@@ -115,6 +117,31 @@ public class RemoveUnusedImports {
       return null;
     }
 
+    // TODO(cushon): remove this override when pattern matching in switch is no longer a preview
+    // feature, and TreePathScanner visits CaseTree#getLabels instead of CaseTree#getExpressions
+    @SuppressWarnings("unchecked") // reflection
+    @Override
+    public Void visitCase(CaseTree tree, Void unused) {
+      if (CASE_TREE_GET_LABELS != null) {
+        try {
+          scan((List<? extends Tree>) CASE_TREE_GET_LABELS.invoke(tree), null);
+        } catch (ReflectiveOperationException e) {
+          throw new LinkageError(e.getMessage(), e);
+        }
+      }
+      return super.visitCase(tree, null);
+    }
+
+    private static final Method CASE_TREE_GET_LABELS = caseTreeGetLabels();
+
+    private static Method caseTreeGetLabels() {
+      try {
+        return CaseTree.class.getMethod("getLabels");
+      } catch (NoSuchMethodException e) {
+        return null;
+      }
+    }
+
     @Override
     public Void scan(Tree tree, Void unused) {
       if (tree == null) {
@@ -146,7 +173,9 @@ public class RemoveUnusedImports {
       public Void visitReference(ReferenceTree referenceTree, Void unused) {
         DCReference reference = (DCReference) referenceTree;
         long basePos =
-            reference.getSourcePosition((DCTree.DCDocComment) getCurrentPath().getDocComment());
+            reference
+                .pos((DCTree.DCDocComment) getCurrentPath().getDocComment())
+                .getStartPosition();
         // the position of trees inside the reference node aren't stored, but the qualifier's
         // start position is the beginning of the reference node
         if (reference.qualifierExpression != null) {
@@ -222,7 +251,10 @@ public class RemoveUnusedImports {
     ParserFactory parserFactory = ParserFactory.instance(context);
     JavacParser parser =
         parserFactory.newParser(
-            javaInput, /*keepDocComments=*/ true, /*keepEndPos=*/ true, /*keepLineMap=*/ true);
+            javaInput,
+            /* keepDocComments= */ true,
+            /* keepEndPos= */ true,
+            /* keepLineMap= */ true);
     unit = parser.parseCompilationUnit();
     unit.sourcefile = source;
     Iterable<Diagnostic<? extends JavaFileObject>> errorDiagnostics =
@@ -241,7 +273,7 @@ public class RemoveUnusedImports {
       Set<String> usedNames,
       Multimap<String, Range<Integer>> usedInJavadoc) {
     RangeMap<Integer, String> replacements = TreeRangeMap.create();
-    for (JCImport importTree : unit.getImports()) {
+    for (JCTree importTree : unit.getImports()) {
       String simpleName = getSimpleName(importTree);
       if (!isUnused(unit, usedNames, usedInJavadoc, importTree, simpleName)) {
         continue;
@@ -259,30 +291,25 @@ public class RemoveUnusedImports {
     return replacements;
   }
 
-  private static String getSimpleName(JCImport importTree) {
-    return importTree.getQualifiedIdentifier() instanceof JCIdent
-        ? ((JCIdent) importTree.getQualifiedIdentifier()).getName().toString()
-        : ((JCFieldAccess) importTree.getQualifiedIdentifier()).getIdentifier().toString();
+  private static String getSimpleName(JCTree importTree) {
+    return getQualifiedIdentifier(importTree).getIdentifier().toString();
   }
 
   private static boolean isUnused(
       JCCompilationUnit unit,
       Set<String> usedNames,
       Multimap<String, Range<Integer>> usedInJavadoc,
-      JCImport importTree,
+      JCTree importTree,
       String simpleName) {
-    String qualifier =
-        ((JCFieldAccess) importTree.getQualifiedIdentifier()).getExpression().toString();
+    JCFieldAccess qualifiedIdentifier = getQualifiedIdentifier(importTree);
+    String qualifier = qualifiedIdentifier.getExpression().toString();
     if (qualifier.equals("java.lang")) {
       return true;
     }
     if (unit.getPackageName() != null && unit.getPackageName().toString().equals(qualifier)) {
       return true;
     }
-    if (importTree.getQualifiedIdentifier() instanceof JCFieldAccess
-        && ((JCFieldAccess) importTree.getQualifiedIdentifier())
-            .getIdentifier()
-            .contentEquals("*")) {
+    if (qualifiedIdentifier.getIdentifier().contentEquals("*")) {
       return false;
     }
 
@@ -293,6 +320,15 @@ public class RemoveUnusedImports {
       return false;
     }
     return true;
+  }
+
+  private static JCFieldAccess getQualifiedIdentifier(JCTree importTree) {
+    // Use reflection because the return type is JCTree in some versions and JCFieldAccess in others
+    try {
+      return (JCFieldAccess) JCImport.class.getMethod("getQualifiedIdentifier").invoke(importTree);
+    } catch (ReflectiveOperationException e) {
+      throw new LinkageError(e.getMessage(), e);
+    }
   }
 
   /** Applies the replacements to the given source, and re-format any edited javadoc. */

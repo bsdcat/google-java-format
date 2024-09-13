@@ -27,7 +27,6 @@ import static com.google.googlejavaformat.java.javadoc.Token.Type.HEADER_OPEN_TA
 import static com.google.googlejavaformat.java.javadoc.Token.Type.LIST_ITEM_OPEN_TAG;
 import static com.google.googlejavaformat.java.javadoc.Token.Type.PARAGRAPH_OPEN_TAG;
 
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.googlejavaformat.java.javadoc.Token.Type;
 
@@ -122,6 +121,38 @@ final class JavadocWriter {
     }
     writeToken(token);
     continuingFooterTag = true;
+  }
+
+  void writeSnippetBegin(Token token) {
+    requestBlankLine();
+    writeToken(token);
+    /*
+     * We don't request a newline here because we should have at least a colon following on this
+     * line, and we may have attributes after that.
+     *
+     * (If we find it convenient, we could instead consume the entire rest of the line as part of
+     * the same token as `{@snippet` itself. But we already would never split the rest of the line
+     * across lines (because we preserve whitespace), so that might not accomplish anything. Plus,
+     * we'd probably want to be careful not to swallow an expectedly early closing `}`.)
+     */
+  }
+
+  void writeSnippetEnd(Token token) {
+    /*
+     * We don't request a newline here because we have preserved all newlines that existed in the
+     * input. TODO: b/323389829 - Improve upon that. Specifically:
+     *
+     * - If there is not yet a newline, we should add one.
+     *
+     * - If there are multiple newlines, we should probably collapse them.
+     *
+     * - If the closing brace isn't indented as we'd want (as in the link below, in which the whole
+     *   @apiNote isn't indented), we should indent it.
+     *
+     * https://github.com/openjdk/jdk/blob/1ebf2cf639300728ffc024784f5dc1704317b0b3/src/java.base/share/classes/java/util/Collections.java#L5993-L6006
+     */
+    writeToken(token);
+    requestBlankLine();
   }
 
   void writeListOpen(Token token) {
@@ -395,7 +426,7 @@ final class JavadocWriter {
 
   // If this is a hotspot, keep a String of many spaces around, and call append(string, start, end).
   private void appendSpaces(int count) {
-    output.append(Strings.repeat(" ", count));
+    output.append(" ".repeat(count));
   }
 
   /**

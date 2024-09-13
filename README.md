@@ -7,13 +7,13 @@
 
 ## Using the formatter
 
-### from the command-line
+### From the command-line
 
 [Download the formatter](https://github.com/google/google-java-format/releases)
 and run it with:
 
 ```
-java -jar /path/to/google-java-format-1.10.0-all-deps.jar <options> [files...]
+java -jar /path/to/google-java-format-${GJF_VERSION?}-all-deps.jar <options> [files...]
 ```
 
 The formatter can act on whole files, on limited lines (`--lines`), on specific
@@ -27,21 +27,6 @@ To reformat changed lines in a specific patch, use
 formatting. This is a deliberate design decision to unify our code formatting on
 a single format.*
 
-#### JDK 16
-
-The following flags are required when running on JDK 16, due to
-[JEP 396: Strongly Encapsulate JDK Internals by Default](https://openjdk.java.net/jeps/396):
-
-```
-java \
-  --add-exports jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED \
-  --add-exports jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED \
-  --add-exports jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED \
-  --add-exports jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED \
-  --add-exports jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED \
-  -jar google-java-format-1.10.0-all-deps.jar <options> [files...]
-```
-
 ### IntelliJ, Android Studio, and other JetBrains IDEs
 
 A
@@ -50,29 +35,41 @@ is available from the plugin repository. To install it, go to your IDE's
 settings and select the `Plugins` category. Click the `Marketplace` tab, search
 for the `google-java-format` plugin, and click the `Install` button.
 
-The plugin will be disabled by default. To enable it in the current project, go
-to `File→Settings...→google-java-format Settings` (or `IntelliJ
-IDEA→Preferences...→Other Settings→google-java-format Settings` on macOS) and
-check the `Enable google-java-format` checkbox. (A notification will be
-presented when you first open a project offering to do this for you.)
+The plugin will be disabled by default. To enable,
+[open the Project settings](https://www.jetbrains.com/help/idea/configure-project-settings.html),
+then click "google-java-format Settings" and check the "Enable
+google-java-format" checkbox.
 
-To enable it by default in new projects, use `File→Other Settings→Default
-Settings...`.
+To enable it by default in new projects,
+[open the default settings for new projects](https://www.jetbrains.com/help/idea/configure-project-settings.html#new-default-settings)
+and configure it under "Other Settings/google-java-format Settings".
 
-When enabled, it will replace the normal `Reformat Code` action, which can be
-triggered from the `Code` menu or with the Ctrl-Alt-L (by default) keyboard
-shortcut.
+When enabled, it will replace the normal `Reformat Code` and `Optimize Imports`
+actions.
 
-The import ordering is not handled by this plugin, unfortunately. To fix the
-import order, download the
-[IntelliJ Java Google Style file](https://raw.githubusercontent.com/google/styleguide/gh-pages/intellij-java-google-style.xml)
-and import it into File→Settings→Editor→Code Style.
+#### IntelliJ JRE Config
+
+The google-java-format plugin uses some internal classes that aren't available
+without extra configuration. To use the plugin, you need to
+[add some options to your IDE's Java runtime](https://www.jetbrains.com/help/idea/tuning-the-ide.html#procedure-jvm-options).
+To do that, go to `Help→Edit Custom VM Options...` and paste in these lines:
+
+```
+--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
+```
+
+Once you've done that, restart the IDE.
 
 ### Eclipse
 
-Version 1.6 of the
-[google-java-format Eclipse plugin](https://github.com/google/google-java-format/releases/download/google-java-format-1.6/google-java-format-eclipse-plugin_1.6.0.jar)
-can be downloaded from the releases page. Drop it into the Eclipse
+The latest version of the `google-java-format` Eclipse plugin can be downloaded
+from the [releases page](https://github.com/google/google-java-format/releases).
+Drop it into the Eclipse
 [drop-ins folder](http://help.eclipse.org/neon/index.jsp?topic=%2Forg.eclipse.platform.doc.isv%2Freference%2Fmisc%2Fp2_dropins_format.html)
 to activate the plugin.
 
@@ -82,21 +79,20 @@ Implementation`.
 
 ### Third-party integrations
 
+*   Visual Studio Code
+    *   [google-java-format-for-vs-code](https://marketplace.visualstudio.com/items?itemName=JoseVSeb.google-java-format-for-vs-code)
 *   Gradle plugins
     *   [spotless](https://github.com/diffplug/spotless/tree/main/plugin-gradle#google-java-format)
     *   [sherter/google-java-format-gradle-plugin](https://github.com/sherter/google-java-format-gradle-plugin)
 *   Apache Maven plugins
     *   [spotless](https://github.com/diffplug/spotless/tree/main/plugin-maven#google-java-format)
-    *   [coveo/fmt-maven-plugin](https://github.com/coveo/fmt-maven-plugin)
+    *   [spotify/fmt-maven-plugin](https://github.com/spotify/fmt-maven-plugin)
     *   [talios/googleformatter-maven-plugin](https://github.com/talios/googleformatter-maven-plugin)
     *   [Cosium/maven-git-code-format](https://github.com/Cosium/maven-git-code-format):
         A maven plugin that automatically deploys google-java-format as a
         pre-commit git hook.
 *   SBT plugins
     *   [sbt/sbt-java-formatter](https://github.com/sbt/sbt-java-formatter)
-*   [maltzj/google-style-precommit-hook](https://github.com/maltzj/google-style-precommit-hook):
-    A pre-commit (pre-commit.com) hook that will automatically run GJF whenever
-    you commit code to your repository
 *   [Github Actions](https://github.com/features/actions)
     *   [googlejavaformat-action](https://github.com/axel-op/googlejavaformat-action):
         Automatically format your Java files when you push on github
@@ -107,13 +103,26 @@ The formatter can be used in software which generates java to output more
 legible java code. Just include the library in your maven/gradle/etc.
 configuration.
 
+`google-java-format` uses internal javac APIs for parsing Java source. The
+following JVM flags are required when running on JDK 16 and newer, due to
+[JEP 396: Strongly Encapsulate JDK Internals by Default](https://openjdk.java.net/jeps/396):
+
+```
+--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED
+--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED
+```
+
 #### Maven
 
 ```xml
 <dependency>
   <groupId>com.google.googlejavaformat</groupId>
   <artifactId>google-java-format</artifactId>
-  <version>1.10.0</version>
+  <version>${google-java-format.version}</version>
 </dependency>
 ```
 
@@ -121,7 +130,7 @@ configuration.
 
 ```groovy
 dependencies {
-  compile 'com.google.googlejavaformat:google-java-format:1.10.0'
+  implementation 'com.google.googlejavaformat:google-java-format:$googleJavaFormatVersion'
 }
 ```
 

@@ -18,6 +18,8 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -157,7 +159,7 @@ public final class OpsBuilder {
   int depth = 0;
 
   /** Add an {@link Op}, and record open/close ops for later validation of unclosed levels. */
-  private void add(Op op) {
+  public final void add(Op op) {
     if (op instanceof OpenOp) {
       depth++;
     } else if (op instanceof CloseOp) {
@@ -279,6 +281,28 @@ public final class OpsBuilder {
     return idx < tokens.size()
         ? Optional.of(tokens.get(idx).getTok().getOriginalText())
         : Optional.empty();
+  }
+
+  /**
+   * Returns the {@link Input.Tok}s starting at the current source position, which are satisfied by
+   * the given predicate.
+   */
+  public ImmutableList<Tok> peekTokens(int startPosition, Predicate<Input.Tok> predicate) {
+    ImmutableList<? extends Input.Token> tokens = input.getTokens();
+    Preconditions.checkState(
+        tokens.get(tokenI).getTok().getPosition() == startPosition,
+        "Expected the current token to be at position %s, found: %s",
+        startPosition,
+        tokens.get(tokenI));
+    ImmutableList.Builder<Tok> result = ImmutableList.builder();
+    for (int idx = tokenI; idx < tokens.size(); idx++) {
+      Tok tok = tokens.get(idx).getTok();
+      if (!predicate.apply(tok)) {
+        break;
+      }
+      result.add(tok);
+    }
+    return result.build();
   }
 
   /**

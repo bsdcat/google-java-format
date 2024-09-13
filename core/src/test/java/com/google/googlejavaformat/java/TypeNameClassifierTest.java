@@ -15,7 +15,6 @@
 package com.google.googlejavaformat.java;
 
 import static com.google.common.truth.Truth.assertThat;
-import static com.google.common.truth.Truth8.assertThat;
 
 import com.google.common.base.Splitter;
 import com.google.googlejavaformat.java.TypeNameClassifier.JavaCaseFormat;
@@ -43,6 +42,7 @@ public final class TypeNameClassifierTest {
     assertThat(JavaCaseFormat.from("a_$")).isEqualTo(JavaCaseFormat.LOWERCASE);
     assertThat(JavaCaseFormat.from("_")).isEqualTo(JavaCaseFormat.LOWERCASE);
     assertThat(JavaCaseFormat.from("_A")).isEqualTo(JavaCaseFormat.UPPERCASE);
+    assertThat(JavaCaseFormat.from("A")).isEqualTo(JavaCaseFormat.UPPER_CAMEL);
   }
 
   private static Optional<Integer> getPrefix(String qualifiedName) {
@@ -62,6 +62,7 @@ public final class TypeNameClassifierTest {
     assertThat(getPrefix("ClassName.CONST")).hasValue(1);
     assertThat(getPrefix("ClassName.varName")).hasValue(1);
     assertThat(getPrefix("ClassName.Inner.varName")).hasValue(2);
+    assertThat(getPrefix("com.R.foo")).hasValue(2);
   }
 
   @Test

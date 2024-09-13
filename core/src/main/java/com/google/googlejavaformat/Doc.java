@@ -15,9 +15,12 @@
 package com.google.googlejavaformat;
 
 import static com.google.common.collect.Iterables.getLast;
+import static com.google.googlejavaformat.CommentsHelper.reformatParameterComment;
 import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.DiscreteDomain;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Range;
@@ -60,6 +63,16 @@ public abstract class Doc {
     FORCED
   }
 
+  /**
+   * The maximum supported line width.
+   *
+   * <p>This can be used as a sentinel/threshold for {@code Doc}s that break unconditionally.
+   *
+   * <p>The value was selected to be obviously too large for any practical line, but small enough to
+   * prevent accidental overflow.
+   */
+  public static final int MAX_LINE_WIDTH = 1000;
+
   /** State for writing. */
   public static final class State {
     final int lastIndent;
@@ -100,43 +113,31 @@ public abstract class Doc {
   private static final Range<Integer> EMPTY_RANGE = Range.closedOpen(-1, -1);
   private static final DiscreteDomain<Integer> INTEGERS = DiscreteDomain.integers();
 
-  // Memoized width; Float.POSITIVE_INFINITY if contains forced breaks.
-  private boolean widthComputed = false;
-  private float width = 0.0F;
+  private final Supplier<Integer> width = Suppliers.memoize(this::computeWidth);
 
   // Memoized flat; not defined (and never computed) if contains forced breaks.
-  private boolean flatComputed = false;
-  private String flat = "";
+  private final Supplier<String> flat = Suppliers.memoize(this::computeFlat);
 
   // Memoized Range.
-  private boolean rangeComputed = false;
-  private Range<Integer> range = EMPTY_RANGE;
+  private final Supplier<Range<Integer>> range = Suppliers.memoize(this::computeRange);
 
   /**
-   * Return the width of a {@code Doc}, or {@code Float.POSITIVE_INFINITY} if it must be broken.
+   * Return the width of a {@code Doc}.
    *
    * @return the width
    */
-  final float getWidth() {
-    if (!widthComputed) {
-      width = computeWidth();
-      widthComputed = true;
-    }
-    return width;
+  final int getWidth() {
+    return width.get();
   }
 
   /**
-   * Return a {@code Doc}'s flat-string value; not defined (and never called) if the (@code Doc}
+   * Return a {@code Doc}'s flat-string value; not defined (and never called) if the {@code Doc}
    * contains forced breaks.
    *
    * @return the flat-string value
    */
   final String getFlat() {
-    if (!flatComputed) {
-      flat = computeFlat();
-      flatComputed = true;
-    }
-    return flat;
+    return flat.get();
   }
 
   /**
@@ -145,19 +146,15 @@ public abstract class Doc {
    * @return the {@code Doc}'s {@link Range}
    */
   final Range<Integer> range() {
-    if (!rangeComputed) {
-      range = computeRange();
-      rangeComputed = true;
-    }
-    return range;
+    return range.get();
   }
 
   /**
    * Compute the {@code Doc}'s width.
    *
-   * @return the width, or {@code Float.POSITIVE_INFINITY} if it must be broken
+   * @return the width
    */
-  abstract float computeWidth();
+  abstract int computeWidth();
 
   /**
    * Compute the {@code Doc}'s flat value. Not defined (and never called) if contains forced breaks.
@@ -214,12 +211,8 @@ public abstract class Doc {
     }
 
     @Override
-    float computeWidth() {
-      float thisWidth = 0.0F;
-      for (Doc doc : docs) {
-        thisWidth += doc.getWidth();
-      }
-      return thisWidth;
+    int computeWidth() {
+      return getWidth(docs);
     }
 
     @Override
@@ -258,10 +251,10 @@ public abstract class Doc {
 
     @Override
     public State computeBreaks(CommentsHelper commentsHelper, int maxWidth, State state) {
-      float thisWidth = getWidth();
+      int thisWidth = getWidth();
       if (state.column + thisWidth <= maxWidth) {
         oneLine = true;
-        return state.withColumn(state.column + (int) thisWidth);
+        return state.withColumn(state.column + thisWidth);
       }
       State broken =
           computeBroken(
@@ -307,8 +300,8 @@ public abstract class Doc {
         State state,
         Optional<Break> optBreakDoc,
         List<Doc> split) {
-      float breakWidth = optBreakDoc.isPresent() ? optBreakDoc.get().getWidth() : 0.0F;
-      float splitWidth = getWidth(split);
+      int breakWidth = optBreakDoc.isPresent() ? optBreakDoc.get().getWidth() : 0;
+      int splitWidth = getWidth(split);
       boolean shouldBreak =
           (optBreakDoc.isPresent() && optBreakDoc.get().fillMode == FillMode.UNIFIED)
               || state.mustBreak
@@ -360,12 +353,16 @@ public abstract class Doc {
      * Get the width of a sequence of {@link Doc}s.
      *
      * @param docs the {@link Doc}s
-     * @return the width, or {@code Float.POSITIVE_INFINITY} if any {@link Doc} must be broken
+     * @return the width
      */
-    static float getWidth(List<Doc> docs) {
-      float width = 0.0F;
+    static int getWidth(List<Doc> docs) {
+      int width = 0;
       for (Doc doc : docs) {
         width += doc.getWidth();
+
+        if (width >= MAX_LINE_WIDTH) {
+          return MAX_LINE_WIDTH; // Paranoid overflow protection
+        }
       }
       return width;
     }
@@ -399,6 +396,10 @@ public abstract class Doc {
     private final RealOrImaginary realOrImaginary;
     private final Indent plusIndentCommentsBefore;
     private final Optional<Indent> breakAndIndentTrailingComment;
+
+    private Input.Tok tok() {
+      return token.getTok();
+    }
 
     private Token(
         Input.Token token,
@@ -467,8 +468,9 @@ public abstract class Doc {
     }
 
     @Override
-    float computeWidth() {
-      return token.getTok().length();
+    int computeWidth() {
+      int idx = Newlines.firstBreak(tok().getOriginalText());
+      return (idx >= 0) ? MAX_LINE_WIDTH : tok().length();
     }
 
     @Override
@@ -483,8 +485,7 @@ public abstract class Doc {
 
     @Override
     public State computeBreaks(CommentsHelper commentsHelper, int maxWidth, State state) {
-      String text = token.getTok().getOriginalText();
-      return state.withColumn(state.column + text.length());
+      return state.withColumn(state.column + computeWidth());
     }
 
     @Override
@@ -524,8 +525,8 @@ public abstract class Doc {
     }
 
     @Override
-    float computeWidth() {
-      return 1.0F;
+    int computeWidth() {
+      return 1;
     }
 
     @Override
@@ -627,8 +628,8 @@ public abstract class Doc {
     }
 
     @Override
-    float computeWidth() {
-      return isForced() ? Float.POSITIVE_INFINITY : (float) flat.length();
+    int computeWidth() {
+      return isForced() ? MAX_LINE_WIDTH : flat.length();
     }
 
     @Override
@@ -717,7 +718,7 @@ public abstract class Doc {
     }
 
     @Override
-    float computeWidth() {
+    int computeWidth() {
       int idx = Newlines.firstBreak(tok.getOriginalText());
       // only count the first line of multi-line block comments
       if (tok.isComment()) {
@@ -727,10 +728,10 @@ public abstract class Doc {
           // Account for line comments with missing spaces, see computeFlat.
           return tok.length() + 1;
         } else {
-          return tok.length();
+          return reformatParameterComment(tok).map(String::length).orElse(tok.length());
         }
       }
-      return idx != -1 ? Float.POSITIVE_INFINITY : (float) tok.length();
+      return idx != -1 ? MAX_LINE_WIDTH : tok.length();
     }
 
     @Override
@@ -741,7 +742,7 @@ public abstract class Doc {
       if (tok.isSlashSlashComment() && !tok.getOriginalText().startsWith("// ")) {
         return "// " + tok.getOriginalText().substring("//".length());
       }
-      return tok.getOriginalText();
+      return reformatParameterComment(tok).orElse(tok.getOriginalText());
     }
 
     @Override

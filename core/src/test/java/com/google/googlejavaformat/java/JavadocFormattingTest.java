@@ -907,6 +907,48 @@ public final class JavadocFormattingTest {
   }
 
   @Test
+  public void blankLinesAroundSnippetAndNoMangling() {
+    String[] input = {
+      "/**", //
+      " * hello world",
+      " * {@snippet :",
+      " * public class Foo {",
+      " *   private String s;",
+      " * }",
+      " * }",
+      " * hello again",
+      " */",
+      "class Test {}",
+    };
+    String[] expected = {
+      "/**", //
+      " * hello world",
+      " *",
+      " * {@snippet :",
+      " * public class Foo {",
+      " *   private String s;",
+      " * }",
+      " * }",
+      " *",
+      " * hello again",
+      " */",
+      "class Test {}",
+    };
+    doFormatTest(input, expected);
+  }
+
+  @Test
+  public void notASnippetUnlessOuterTag() {
+    String[] input = {
+      "/** I would like to tell you about the {@code {@snippet ...}} tag. */", "class Test {}",
+    };
+    String[] expected = {
+      "/** I would like to tell you about the {@code {@snippet ...}} tag. */", "class Test {}",
+    };
+    doFormatTest(input, expected);
+  }
+
+  @Test
   public void blankLineBeforeParams() {
     String[] input = {
       "/**", //
@@ -937,7 +979,9 @@ public final class JavadocFormattingTest {
       "class Test {}",
     };
     String[] expected = {
-      "/** @param this is a param */", //
+      "/**", //
+      " * @param this is a param",
+      " */",
       "class Test {}",
     };
     doFormatTest(input, expected);
@@ -1410,6 +1454,35 @@ public final class JavadocFormattingTest {
       "  /**",
       "   * \u2028 Set and enable something.",
       "   */",
+      "  public void setSomething() {}",
+      "}",
+    };
+    doFormatTest(input, expected);
+  }
+
+  @Test
+  public void missingSummaryFragment() {
+    String[] input = {
+      "public class Foo {",
+      "  /**",
+      "   * @return something.",
+      "   */",
+      "  public void setSomething() {}",
+      "",
+      "  /**",
+      "   * @hide",
+      "   */",
+      "  public void setSomething() {}",
+      "}",
+    };
+    String[] expected = {
+      "public class Foo {",
+      "  /**",
+      "   * @return something.",
+      "   */",
+      "  public void setSomething() {}",
+      "",
+      "  /** @hide */",
       "  public void setSomething() {}",
       "}",
     };
